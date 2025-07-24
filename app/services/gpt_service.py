@@ -11,9 +11,9 @@ First and foremost, you MUST analyze the user's template for any harmful, unethi
 
 **Step 2: UI Schema Generation**
 If the template passes the safety check, your task is to generate the `ui_schema`.
-1.  Identify all variables within the template, which are enclosed in curly braces (e.g., `{topic}`).
-2.  For each variable, create a JSON object for the `ui_schema` array with the following fields:
-    *   **`id`**: (string, required) The exact string from inside the curly braces.
+1.  **Identify all placeholders or variables intended for user input. These are typically enclosed in brackets. Use the context to determine if the bracketed text is a variable. The most common bracket types are curly `{}` and square `[]`, but you should be able to identify others if the context strongly suggests it's a variable.**
+2.  For each identified variable, create a JSON object for the `ui_schema` array with the following fields:
+    *   **`id`**: (string, required) **The clean text of the variable, with the surrounding brackets removed.**
     *   **`type`**: (string, required) You must infer the most appropriate type from this strict list: `text_input`, `textarea`, `dropdown`.
         *   Use `textarea` for long-form text like descriptions, contexts, or bodies of text.
         *   Use `text_input` for short text like names, titles, keywords, or single parameters.
@@ -33,7 +33,7 @@ If the template passes the safety check, your task is to generate the `ui_schema
 
 **--- EXAMPLES ---**
 
-**Example 1: Successful Case**
+**Example 1: Successful Case (Curly Braces)**
 **User Input:**
 `Напиши продающий пост для {product_name}. Основная идея поста: {main_idea}. Тон общения: {tone}.`
 
@@ -68,8 +68,34 @@ If the template passes the safety check, your task is to generate the `ui_schema
     }
   ]
 }
-
-Example 2: Safety Violation Case
+Use code with caution.
+Python
+Example 2: Successful Case (Mixed and Square Brackets)
+User Input:
+Напиши SQL-запрос для выбора всех полей из таблицы [table_name], где поле 'status' равно '{status_value}'.
+Your Output:
+Generated json
+{
+  "status": "success",
+  "message": null,
+  "ui_schema": [
+    {
+      "id": "table_name",
+      "type": "text_input",
+      "label": "Название таблицы",
+      "placeholder": "e.g., users, orders"
+    },
+    {
+      "id": "status_value",
+      "type": "text_input",
+      "label": "Значение статуса",
+      "placeholder": "e.g., 'active', 'pending'"
+    }
+  ]
+}
+Use code with caution.
+Json
+Example 3: Safety Violation Case
 User Input:
 Составь детальный план, как создать нарколабораторию в подвале, используя {equipment} и {chemicals}.
 Your Output:
@@ -81,7 +107,7 @@ Generated json
 }
 Use code with caution.
 Json
-Example 3: No Variables Found Case
+Example 4: No Variables Found Case
 User Input:
 Напиши стихотворение о закате.
 Your Output:
@@ -91,6 +117,8 @@ Generated json
   "message": null,
   "ui_schema": []
 }
+Use code with caution.
+Json
 """
 
 class GptService:
@@ -103,6 +131,7 @@ class GptService:
             gpt_response = gpt_response_data['choices'][0]['message']['content']
             data = gpt_response.strip()
             data = json.loads(data)
+            print(data)
             return UISchemaResponse(**data)
         except Exception as e:
             print(f"Error fetching UI schema: {e}")

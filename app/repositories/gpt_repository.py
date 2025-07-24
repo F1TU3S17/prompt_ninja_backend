@@ -1,10 +1,11 @@
 import json
 import httpx
-from app.core.config import settings
+
 class GptRepository:
     def __init__(self):
         self.base_url = 'https://openrouter.ai/api/v1/chat/completions'
         self.api_key = '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'
+        self.model ='deepseek/deepseek-r1'
 
     async def get_ui_schema(self, user_input: str, system_prompt: str):
         try:
@@ -16,7 +17,7 @@ class GptRepository:
                     'Authorization': f'Bearer {self.api_key}'
                 },
                 json={
-                    "model": "microsoft/mai-ds-r1:free",
+                    "model": self.model,
                     "temperature": 1,
                     "messages": [
                         {

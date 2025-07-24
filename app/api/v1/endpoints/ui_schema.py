@@ -9,10 +9,6 @@ router = APIRouter(prefix="/ui-schema", tags=["UI Schema"])
 
 @router.post("/generate", response_model=UISchemaResponse, summary="Generate UI Schema from User Input Template")
 async def generate_ui_schema(request: UISchemaRequest):
-    """
-    Generate UI schema based on user input template.
-    This endpoint analyzes the prompt and returns the UI schema without saving it.
-    """
     gpt_service = GptService()
     ui_schema_response = await gpt_service.fetch_ui_schema(request.prompt_template)
     
