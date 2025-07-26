@@ -14,6 +14,12 @@ class GptRepository:
                 provider='mistral'
             ),
             GptModel(
+                name='mistral-small-2501', 
+                base_url='https://api.mistral.ai/v1/chat/completions', 
+                api_key=settings.MISTRAL_API_KEY,
+                provider='mistral'
+            ),
+            GptModel(
                 name='deepseek/deepseek-r1', 
                 base_url='https://openrouter.ai/api/v1/chat/completions', 
                 api_key=settings.OPEN_ROUTER_API_KEY,
