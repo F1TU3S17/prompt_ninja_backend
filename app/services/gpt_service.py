@@ -1,5 +1,7 @@
 import json
 import re
+
+import tiktoken
 from app.repositories.gpt_repository import GptRepository
 from app.schemas.ui_schema import UISchemaResponse
 from app.schemas.validation_prompt import ValidationPromptResponse
@@ -40,6 +42,16 @@ class GptService:
         json_text = text[start_idx:end_idx + 1]
         return json_text.strip()
 
+    def count_tokens(self, text: str) -> int:
+      """Приблизительный подсчет токенов для DeepSeek"""
+      try:
+          # Используем cl100k_base как приближение для DeepSeek
+          encoding = tiktoken.get_encoding("gpt-4")
+          return len(encoding.encode(text))
+      except:
+          # Fallback: примерная оценка
+          return len(text) // 3  
+
     async def fetch_ui_schema(self, user_input: str) -> UISchemaResponse:
         try:
             gpt_response_data = await GptRepository().get_ui_schema(user_input, self.create_ui_schema_system_prompt)
@@ -76,7 +88,6 @@ class GptService:
     async def fetch_validation_prompt_data(self, prompt_data: dict) -> ValidationPromptResponse:
         try:
             gpt_response_data = await GptRepository().get_validation_prompt(prompt_data, self.system_prompt_moderator)
-            
             # Проверяем, что репозиторий вернул данные
             if not gpt_response_data:
                 return ValidationPromptResponse(is_valid=False, message="Не удалось получить ответ от AI модели")
