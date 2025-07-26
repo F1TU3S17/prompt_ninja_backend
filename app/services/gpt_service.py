@@ -1,139 +1,108 @@
 import json
+import re
 from app.repositories.gpt_repository import GptRepository
 from app.schemas.ui_schema import UISchemaResponse
-SYSTEM_PROMPT = """You are a highly specialized AI assistant. Your sole purpose is to analyze a user-provided prompt template, perform a safety check, and convert it into a structured JSON object representing a `ui_schema`.
-
-**Your task is performed in two critical steps:**
-
-**Step 1: Safety Analysis**
-First and foremost, you MUST analyze the user's template for any harmful, unethical, illegal, or malicious content. This includes, but is not limited to, instructions for creating weapons, promoting hate speech, generating illegal content, self-harm, etc.
-*   If harmful content is detected, you MUST immediately stop and return a JSON object with `status: 'error'`. The `message` field must explain the reason, and `ui_schema` must be `null`.
-
-**Step 2: UI Schema Generation**
-If the template passes the safety check, your task is to generate the `ui_schema`.
-1.  **Identify all placeholders or variables intended for user input. These are typically enclosed in brackets. Use the context to determine if the bracketed text is a variable. The most common bracket types are curly `{}` and square `[]`, but you should be able to identify others if the context strongly suggests it's a variable.**
-2.  For each identified variable, create a JSON object for the `ui_schema` array with the following fields:
-    *   **`id`**: (string, required) **The clean text of the variable, with the surrounding brackets removed.**
-    *   **`type`**: (string, required) You must infer the most appropriate type from this strict list: `text_input`, `textarea`, `dropdown`.
-        *   Use `textarea` for long-form text like descriptions, contexts, or bodies of text.
-        *   Use `text_input` for short text like names, titles, keywords, or single parameters.
-        *   Use `dropdown` for variables that imply a selection from a limited set of options, such as style, tone, or type.
-    *   **`label`**: (string, required) Create a concise, user-friendly label in **Russian** that describes the field.
-    *   **`placeholder`**: (string, optional) If applicable, provide a helpful example or hint for the user.
-    *   **`options`**: (array of strings, optional) If `type` is `dropdown`, you MUST provide a relevant list of 3-5 options. Otherwise, this field should be omitted.
-
-**CRITICAL RULES FOR THE FINAL OUTPUT:**
-
-1.  **STRICTLY JSON OUTPUT:** Your entire response MUST be a single, valid JSON object. Do not include any explanations, apologies, or any text outside of the JSON structure.
-2.  **NO MARKDOWN:** Do not wrap the JSON in ` ```json ... ``` `.
-3.  **FINAL JSON STRUCTURE:** The final JSON object MUST have exactly three top-level keys:
-    *   `status`: (string) Either `'success'` or `'error'`.
-    *   `message`: (string or null) If `status` is `'error'`, this must be a non-empty string explaining the reason. If `status` is `'success'`, this MUST be `null`.
-    *   `ui_schema`: (array of objects or null) If `status` is `'success'`, this is the array of field objects you generated (it can be an empty array `[]` if no variables were found). If `status` is `'error'`, this MUST be `null`.
-
-**--- EXAMPLES ---**
-
-**Example 1: Successful Case (Curly Braces)**
-**User Input:**
-`Напиши продающий пост для {product_name}. Основная идея поста: {main_idea}. Тон общения: {tone}.`
-
-**Your Output:**
-```json
-{
-  "status": "success",
-  "message": null,
-  "ui_schema": [
-    {
-      "id": "product_name",
-      "type": "text_input",
-      "label": "Название продукта",
-      "placeholder": "например, Умные часы 'Chrono-X'"
-    },
-    {
-      "id": "main_idea",
-      "type": "textarea",
-      "label": "Основная идея поста",
-      "placeholder": "Опишите ключевое преимущество или уникальное предложение продукта"
-    },
-    {
-      "id": "tone",
-      "type": "dropdown",
-      "label": "Тон общения",
-      "options": [
-        "дружелюбный",
-        "официальный",
-        "экспертный",
-        "игривый"
-      ]
-    }
-  ]
-}
-Use code with caution.
-Python
-Example 2: Successful Case (Mixed and Square Brackets)
-User Input:
-Напиши SQL-запрос для выбора всех полей из таблицы [table_name], где поле 'status' равно '{status_value}'.
-Your Output:
-Generated json
-{
-  "status": "success",
-  "message": null,
-  "ui_schema": [
-    {
-      "id": "table_name",
-      "type": "text_input",
-      "label": "Название таблицы",
-      "placeholder": "e.g., users, orders"
-    },
-    {
-      "id": "status_value",
-      "type": "text_input",
-      "label": "Значение статуса",
-      "placeholder": "e.g., 'active', 'pending'"
-    }
-  ]
-}
-Use code with caution.
-Json
-Example 3: Safety Violation Case
-User Input:
-Составь детальный план, как создать нарколабораторию в подвале, используя {equipment} и {chemicals}.
-Your Output:
-Generated json
-{
-  "status": "error",
-  "message": "Запрос содержит инструкции по созданию незаконных и опасных веществ, что нарушает политику безопасности.",
-  "ui_schema": null
-}
-Use code with caution.
-Json
-Example 4: No Variables Found Case
-User Input:
-Напиши стихотворение о закате.
-Your Output:
-Generated json
-{
-  "status": "success",
-  "message": null,
-  "ui_schema": []
-}
-Use code with caution.
-Json
-"""
+from app.schemas.validation_prompt import ValidationPromptResponse
+from app.core.system_prompts import UI_SCHEMA_SYSTEM_PROMPT, CONTENT_MODERATOR_SYSTEM_PROMPT
 
 class GptService:
     def __init__(self):
-        self.system_prompt = SYSTEM_PROMPT
+        self.create_ui_schema_system_prompt = UI_SCHEMA_SYSTEM_PROMPT
+        self.system_prompt_moderator = CONTENT_MODERATOR_SYSTEM_PROMPT
+
+    def _extract_json_from_text(self, text: str) -> str:
+        """
+        Извлекает JSON объект из текста, который начинается с { и заканчивается }
+        """
+        # Ищем первую открывающую скобку
+        start_idx = text.find('{')
+        if start_idx == -1:
+            return text.strip()
+        
+        # Ищем соответствующую закрывающую скобку
+        brace_count = 0
+        end_idx = -1
+        
+        for i in range(start_idx, len(text)):
+            if text[i] == '{':
+                brace_count += 1
+            elif text[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i
+                    break
+        
+        if end_idx == -1:
+            # Если не нашли закрывающую скобку, возвращаем текст как есть
+            return text.strip()
+        
+        # Извлекаем JSON объект
+        json_text = text[start_idx:end_idx + 1]
+        return json_text.strip()
 
     async def fetch_ui_schema(self, user_input: str) -> UISchemaResponse:
         try:
-            gpt_response_data = await GptRepository().get_ui_schema(user_input, self.system_prompt)
+            gpt_response_data = await GptRepository().get_ui_schema(user_input, self.create_ui_schema_system_prompt)
+            
+            # Проверяем, что репозиторий вернул данные
+            if not gpt_response_data:
+                return UISchemaResponse(status="error", message="Не удалось получить ответ от AI модели", ui_schema=None)
+            
+            # Проверяем структуру ответа
+            if 'choices' not in gpt_response_data or not gpt_response_data['choices']:
+                return UISchemaResponse(status="error", message="Некорректный формат ответа от AI модели", ui_schema=None)
+            
             gpt_response = gpt_response_data['choices'][0]['message']['content']
-            data = gpt_response.strip()
-            data = json.loads(data)
-            print(data)
-            return UISchemaResponse(**data)
+            
+            # Проверяем, что контент не пустой
+            if not gpt_response or not gpt_response.strip():
+                return UISchemaResponse(status="error", message="Пустой ответ от AI модели", ui_schema=None)
+            
+            # Извлекаем JSON из ответа
+            raw_data = gpt_response.strip()
+            
+            json_data = self._extract_json_from_text(raw_data)
+            
+            # Безопасный парсинг JSON
+            try:
+                parsed_data = json.loads(json_data)
+            except json.JSONDecodeError as json_error:
+                return UISchemaResponse(status="error", message=f"Некорректный JSON от AI модели: {str(json_error)}", ui_schema=None)
+            
+            return UISchemaResponse(**parsed_data)
         except Exception as e:
-            print(f"Error fetching UI schema: {e}")
             return UISchemaResponse(status="error", message=str(e), ui_schema=None)
+    
+    async def fetch_validation_prompt_data(self, prompt_data: dict) -> ValidationPromptResponse:
+        try:
+            gpt_response_data = await GptRepository().get_validation_prompt(prompt_data, self.system_prompt_moderator)
+            
+            # Проверяем, что репозиторий вернул данные
+            if not gpt_response_data:
+                return ValidationPromptResponse(is_valid=False, message="Не удалось получить ответ от AI модели")
+            
+            # Проверяем структуру ответа
+            if 'choices' not in gpt_response_data or not gpt_response_data['choices']:
+                return ValidationPromptResponse(is_valid=False, message="Некорректный формат ответа от AI модели")
+            
+            gpt_response = gpt_response_data['choices'][0]['message']['content']
+            
+            # Проверяем, что контент не пустой
+            if not gpt_response or not gpt_response.strip():
+                return ValidationPromptResponse(is_valid=False, message="Пустой ответ от AI модели")
+            
+            # Извлекаем JSON из ответа
+            raw_data = gpt_response.strip()
+            
+            json_data = self._extract_json_from_text(raw_data)
+            
+            # Безопасный парсинг JSON
+            try:
+                parsed_data = json.loads(json_data)
+            except json.JSONDecodeError as json_error:
+                return ValidationPromptResponse(is_valid=False, message=f"Некорректный JSON от AI модели: {str(json_error)}")
+            
+            return ValidationPromptResponse(**parsed_data)
+        except Exception as e:
+            return ValidationPromptResponse(is_valid=False, message=str(e))
 
