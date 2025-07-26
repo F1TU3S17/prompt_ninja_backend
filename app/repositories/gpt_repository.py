@@ -1,24 +1,43 @@
 from app.core.logger import Logger
 import httpx
 from app.core.config import settings
+from app.schemas.gpt_model import GptModel
+
 
 class GptRepository:
     def __init__(self):
-        self.base_url = 'https://openrouter.ai/api/v1/chat/completions'
-        self.api_key = settings.OPEN_ROUTER_API_KEY
-        self.models = ['deepseek/deepseek-r1', 'deepseek/deepseek-r1:free']
-
+        self.models = [ 
+            GptModel(
+                name='open-mistral-nemo', 
+                base_url='https://api.mistral.ai/v1/chat/completions', 
+                api_key=settings.MISTRAL_API_KEY,
+                provider='mistral'
+            ),
+            GptModel(
+                name='deepseek/deepseek-r1', 
+                base_url='https://openrouter.ai/api/v1/chat/completions', 
+                api_key=settings.OPEN_ROUTER_API_KEY,
+                provider='openrouter'
+            ), 
+            GptModel(
+                name='deepseek/deepseek-r1:free', 
+                base_url='https://openrouter.ai/api/v1/chat/completions', 
+                api_key=settings.OPEN_ROUTER_API_KEY,
+                provider='openrouter'
+            ),
+        ]
+        self.logger = Logger('GptRepository')
     async def get_ui_schema(self, user_input: str, system_prompt: str) -> dict:
         for model in self.models:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    url=self.base_url,
+                    url=model.base_url,
                     headers={
                         'Content-Type': 'application/json',
-                        'Authorization': f'Bearer {self.api_key}'
+                        'Authorization': f'Bearer {model.api_key}'
                     },
                     json={
-                        "model": model,
+                        "model": model.name,
                         "temperature": 1,
                         "messages": [
                             {
@@ -33,6 +52,7 @@ class GptRepository:
                     }
                 )
                 if response.status_code != 200:
+                    self.logger.error(f"Failed to fetch validation prompt with model {model}: {response.status_code} - {response.text}")
                     continue
                 data = response.json()
                 return data
@@ -42,13 +62,13 @@ class GptRepository:
         for model in self.models:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                url=self.base_url,
+                url=model.base_url,
                 headers={
                     'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.api_key}'
+                    'Authorization': f'Bearer {model.api_key}'
                 },
                 json={
-                    "model": model,
+                    "model": model.name,
                     "temperature": 1,
                     "messages": [
                         {
@@ -61,7 +81,7 @@ class GptRepository:
                         }
                 ]})
                 if response.status_code != 200:
-                    Logger('Gpt repository').error(f"Failed to fetch validation prompt with model {model}: {response.status_code} - {response.text}")
+                    self.logger.error(f"Failed to fetch validation prompt with model {model}: {response.status_code} - {response.text}")
                     continue
                 data = response.json()
                 return data
