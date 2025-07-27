@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  prompt-ninja-api:
+    build: .
+    container_name: prompt-ninja-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      # Монтируем только логи для отладки (опционально)
+      - ./logs:/app/logs
+    networks:
+      - prompt-ninja-network
+
+networks:
+  prompt-ninja-network:
+    driver: bridge

@@ -16,3 +16,4 @@ class UISchemaResponse(BaseModel):
     status: Literal["success", "error"]
     message: Optional[str] = None
     ui_schema: Optional[List[UIField]] = None
+    prompt_template: Optional[str] = None

@@ -1,7 +1,17 @@
 from fastapi import FastAPI
 from app.api.v1.endpoints.ui_schema import router as ui_schema_router
 from app.api.v1.endpoints.moderation import moderation_router
-app = FastAPI(title='Prompt-ninja AI API', version='1.0.0',)
+
+app = FastAPI(
+    title='Prompt-ninja AI API', 
+    version='1.0.0',
+    description='API для создания UI схем и модерации контента с использованием AI'
+)
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "prompt-ninja-api"}
 
 app.include_router(
     router=ui_schema_router,

@@ -8,7 +8,7 @@ class GptRepository:
     def __init__(self):
         self.models = [ 
             GptModel(
-                name='open-mistral-nemo', 
+                name='mistral-small-2506', 
                 base_url='https://api.mistral.ai/v1/chat/completions', 
                 api_key=settings.MISTRAL_API_KEY,
                 provider='mistral'
@@ -33,6 +33,7 @@ class GptRepository:
             ),
         ]
         self.logger = Logger('GptRepository')
+
     async def get_ui_schema(self, user_input: str, system_prompt: str) -> dict:
         for model in self.models:
             async with httpx.AsyncClient() as client:
@@ -58,11 +59,12 @@ class GptRepository:
                     }
                 )
                 if response.status_code != 200:
-                    self.logger.error(f"Failed to fetch validation prompt with model {model}: {response.status_code} - {response.text}")
+                    self.logger.error(f"Failed to fetch validation prompt with model {model.name}: {response.status_code} - {response.text}")
                     continue
                 data = response.json()
+                self.logger.info(f"Fetched UI schema with model {model.name}: {data}")
                 return data
-        raise Exception(f"Failed to fetch UI schema with model {model}: {response.status_code} - {response.text}")
+        raise Exception(f"Failed to fetch UI schema with model {model.name}: {response.status_code} - {response.text}")
 
     async def get_validation_prompt(self, prompt_data: dict, system_prompt: str) -> dict:
         for model in self.models:
@@ -87,7 +89,7 @@ class GptRepository:
                         }
                 ]})
                 if response.status_code != 200:
-                    self.logger.error(f"Failed to fetch validation prompt with model {model}: {response.status_code} - {response.text}")
+                    self.logger.error(f"Failed to fetch validation prompt with model {model.name}: {response.status_code} - {response.text}")
                     continue
                 data = response.json()
                 return data
